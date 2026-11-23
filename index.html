@@ -2428,12 +2428,12 @@ window.FILAMENT_CATALOG = [
     ell(0, 2, 33, 13.5, 13, 16.5, 0);
     ell(0, -1, 22, 12, 11, 8, 4);        // lower head, blends into the skirt
     // a French beret, tilted to his right side, with the little stalk on top
-    const tilt = 0.4, ct = Math.cos(tilt), st = Math.sin(tilt), bc = [3.8, 1.5, 48.4];
+    const tilt = 0.4, ct = Math.cos(tilt), st = Math.sin(tilt), bc = [3.6, 1.5, 46.0];
     const rot = (x, y, z) => { const dx = x - bc[0], dz = z - bc[2]; return [dx * ct - dz * st, y - bc[1], dx * st + dz * ct]; }; // into the beret's frame
-    prims.push({ bb: [bc[0] - 14, bc[1] - 14, bc[2] - 8, bc[0] + 14, bc[1] + 14, bc[2] + 8], k: 0.6,
-      d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const c = w > 0 ? w / 5.2 : (w + 0.2) / 3.0, a = u / 12.8, b = v / 12.3, l = Math.hypot(a, b, c); return (l - 1) * (w > 0 ? 4.4 : 3.0); } });
-    prims.push({ bb: [bc[0] - 6, bc[1] - 4, bc[2], bc[0] + 6, bc[1] + 4, bc[2] + 8], k: 0.8,
-      d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const px = u - 0.5, py = v, pz = Math.max(0, Math.min(3.0, w - 4.4)); return Math.hypot(px, py, w - 4.4 - pz) - 0.9; } });
+    prims.push({ bb: [bc[0] - 17, bc[1] - 17, bc[2] - 9, bc[0] + 17, bc[1] + 17, bc[2] + 9], k: 0.6,
+      d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const c = w > 0 ? w / 6.0 : (w + 0.2) / 3.3, a = u / 15.8, b = v / 15.2, l = Math.hypot(a, b, c); return (l - 1) * (w > 0 ? 5.0 : 3.3); } });
+    prims.push({ bb: [bc[0] - 7, bc[1] - 4, bc[2], bc[0] + 7, bc[1] + 4, bc[2] + 10], k: 0.8,
+      d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const px = u - 0.5, py = v, pz = Math.max(0, Math.min(3.2, w - 5.1)); return Math.hypot(px, py, w - 5.1 - pz) - 1.0; } });
     // eyes (raised, on the front = -Y), with pupils
     for (const s of [-1, 1]) {
       ell(s * 6.2, -10.0, 27.5, 5.0, 4.0, 5.4, 1.5);
