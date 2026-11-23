@@ -3,7 +3,7 @@
 **Paint 3D models for multicolor printing, right in your browser.**
 Open a model, paint it with your filaments and color mixes, and export a project that opens already painted in your slicer.
 
-**Use it here: https://whizgirl.github.io/CthulHue/**
+**Use it here: https://labcraftstudio.github.io/CthulHue/**
 
 Made for iPad and Apple Pencil, and works with a mouse on a computer too. By Sarah at Labcraft Studio.
 
@@ -48,7 +48,7 @@ Designed by Sarah at Labcraft Studio. Built with Claude, an AI model made by Ant
 
 ## Problems and ideas
 
-Please [open an issue](https://github.com/Whizgirl/CthulHue/issues).
+Please [open an issue](https://github.com/LabcraftStudio/CthulHue/issues).
 
 ## License
 
