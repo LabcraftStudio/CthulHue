@@ -41,6 +41,7 @@ Tips:
 - [Bambu Studio](https://github.com/bambulab/BambuStudio) by Bambu Lab (AGPL-3.0): measured mix colors, Bambu filament names and colors, the mixed-filament 3MF format.
 - FilamentMixer color mixing by Justin Hayes (MIT), as included in Bambu Studio and Snapmaker Orca.
 - Polymaker Panchroma colors as published by Polymaker.
+- The sample octopus (`samples/octopus.zip`) was modeled by Sarah at Labcraft Studio.
 
 Not affiliated with or endorsed by Bambu Lab, Snapmaker, Flashforge or Polymaker. Product names are their owners' trademarks.
 

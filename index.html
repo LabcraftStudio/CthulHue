@@ -5449,13 +5449,31 @@ window.addEventListener('dragover', e => { e.preventDefault(); document.body.cla
 window.addEventListener('dragleave', () => document.body.classList.remove('drop'));
 window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f) openModelFile(f); });
 
-// sample: a small original octopus (organic curves for brushes, shading and Image projection)
-$('eSample').onclick = () => {
-  const m = window.LabSample.octopus();
-  const paint = new Uint8Array(m.tris.length / 3).fill(Math.min(5, S.palette.length)); // start white so colors show up
-  S.name = 'Sample octopus';
-  setMesh(m.verts, m.tris, paint);
-  toast('Try it: Fill his beret and eyes, shade his head with the Soft brush, or put an image on him.', 5000);
+// sample: Sarah's octopus in a beret (packed mesh); if it can't be loaded, the app builds a simpler one itself
+async function loadSampleMesh() {
+  for (const u of ['samples/octopus.zip']) {
+    try {
+      const r = await fetch(u); if (!r.ok) continue;
+      const z = await JSZip.loadAsync(await r.arrayBuffer());
+      const h = JSON.parse(await z.file('mesh.json').async('string'));
+      const q = new Uint16Array(await z.file('verts.u16').async('arraybuffer')), d = new Int32Array(await z.file('tris.i32').async('arraybuffer'));
+      const verts = new Float32Array(h.nV * 3), tris = new Uint32Array(h.nT * 3);
+      for (let i = 0; i < h.nV; i++) for (let k = 0; k < 3; k++) verts[i * 3 + k] = h.min[k] + q[i * 3 + k] / 65535 * (h.max[k] - h.min[k]);
+      let prev = 0; for (let i = 0; i < d.length; i++) { prev += d[i]; tris[i] = prev; }
+      return { verts, tris };
+    } catch (_) { /* try the next place */ }
+  }
+  return window.LabSample.octopus();
+}
+$('eSample').onclick = async () => {
+  $('eSample').disabled = true;
+  try {
+    const m = await loadSampleMesh();
+    const paint = new Uint8Array(m.tris.length / 3).fill(Math.min(5, S.palette.length)); // start white so colors show up
+    S.name = 'Sample octopus';
+    setMesh(m.verts, m.tris, paint);
+    toast('Try it: Fill his beret and eyes, shade his head with the Soft brush, or put an image on him.', 5000);
+  } finally { $('eSample').disabled = false; }
 };
 
 // ---------------- print checks ----------------
