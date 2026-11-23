@@ -2436,17 +2436,25 @@ window.FILAMENT_CATALOG = [
       d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const sm = Math.max(0, Math.min(1, (w + 2) / 4)), h = sm * sm * (3 - 2 * sm), rz = 3.3 + 2.7 * h; return ellD(u, v, w + 0.2 * (1 - h), 15.8, 15.2, rz); } });
     prims.push({ bb: [bc[0] - 7, bc[1] - 4, bc[2], bc[0] + 7, bc[1] + 4, bc[2] + 10], k: 0.8,
       d: (x, y, z) => { const [u, v, w] = rot(x, y, z); const px = u - 0.5, py = v, pz = Math.max(0, Math.min(3.2, w - 5.1)); return Math.hypot(px, py, w - 5.1 - pz) - 1.0; } });
-    // the beret's band: a slim roll around the head just under the beret, so it reads as a hat sitting on him
+    // the beret's band: a slim roll just under the beret's edge where it meets the head, so it reads as a hat sitting on him
     {
-      const head = prims[0].d, unrot = (u, v, w) => [bc[0] + u * ct + w * st, bc[1] + v, bc[2] - u * st + w * ct];
-      const ring = [], wB = -1.1, N = 64;
+      const head = prims[0].d, beret = prims[prims.length - 2].d, unrot = (u, v, w) => [bc[0] + u * ct + w * st, bc[1] + v, bc[2] - u * st + w * ct];
+      const headR = (cu, sv, w) => { let lo = 0, hi = 22; for (let it = 0; it < 28; it++) { const r = (lo + hi) / 2, q = unrot(r * cu, r * sv, w); if (head(q[0], q[1], q[2]) < 0) lo = r; else hi = r; } return lo; };
+      const ring = [], N = 72, BR = 1.15;
       for (let i = 0; i <= N; i++) {
         const th = i / N * Math.PI * 2, cu = Math.cos(th), sv = Math.sin(th);
-        let lo = 0, hi = 20;
-        for (let it = 0; it < 30; it++) { const r = (lo + hi) / 2, q = unrot(r * cu, r * sv, wB); if (head(q[0], q[1], q[2]) < 0) lo = r; else hi = r; }
-        ring.push(unrot(lo + 0.35, lo * 0 + (lo + 0.35) * sv - (lo + 0.35) * sv + (lo + 0.35) * sv, wB).map((x, k) => k === 1 ? bc[1] + (lo + 0.35) * sv : x));
+        // walk down the head (in the beret's frame) until we leave the beret's underside
+        let w = 1;
+        for (; w > -9; w -= 0.05) { const r = headR(cu, sv, w), q = unrot(r * cu, r * sv, w); if (beret(q[0], q[1], q[2]) > 0.05) break; }
+        const wc = w - BR * 0.8, r = headR(cu, sv, wc) + BR * 0.45;
+        ring.push(unrot(r * cu, r * sv, wc));
       }
-      for (let i = 0; i < N; i++) cone(ring[i], ring[i + 1], 1.05, 1.05, 0);
+      ring.pop(); // closed loop: smooth the path a few times so the band runs evenly
+      for (let pass = 0; pass < 6; pass++) {
+        const sm = ring.map((_, i) => [0, 1, 2].map(c => (ring[(i + N - 2) % N][c] + 2 * ring[(i + N - 1) % N][c] + 3 * ring[i][c] + 2 * ring[(i + 1) % N][c] + ring[(i + 2) % N][c]) / 9));
+        for (let i = 0; i < N; i++) ring[i] = sm[i];
+      }
+      for (let i = 0; i < N; i++) cone(ring[i], ring[(i + 1) % N], BR, BR, 0.25);
     }
     // eyes (raised, on the front = -Y), with pupils
     for (const s of [-1, 1]) {
