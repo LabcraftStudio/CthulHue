@@ -1900,7 +1900,9 @@ function region(t) {
   if (seed < 0) return [];
   const mark = new Uint8Array(m.nT);
   let R, colorOnly = null;
-  if (S.tool === 'fill') R = C.smartFill(seed, S.edges ? S.angle : 180, m.adj, m.normals, mark, m.wall);
+  // Fill works like a paint bucket: it spreads only over the colour that was tapped, so neighbouring
+  // colours (and earlier work) are never painted over. Sharp edges can stop it too (Edges switch).
+  if (S.tool === 'fill') { R = C.smartFill(seed, S.edges ? S.angle : 180, m.adj, m.normals, mark, m.wall, m.paint); colorOnly = m.paint[seed]; }
   else if (S.tool === 'parts') return partTris(t);
   else { R = C.sameColorFill(seed, m.adj, m.paint, mark, m.wall); colorOnly = m.paint[seed]; }
   if (S.lines.length) R = R.concat(C.absorbWalls(R, m.adj, m.wall, S.segs, m.normals, m.cent, m.paint, colorOnly));
@@ -2291,7 +2293,7 @@ for (const id of ['tools', 'palette']) {
 const HINTS = {
   brush: 'Pencil paints, fingers turn and zoom. With a mouse: left paints, right drag turns, shift + right drag pans.',
   outline: 'Draw a line on the model; Fill stops at it. End near where you started to close the shape. Streamline smooths out hand wobble (higher = smoother, slightly less exact). Smaller line detail = crisper color edge.',
-  fill: 'Tap to fill an area. It stops at your outlines, and at sharp edges when that switch is on. Hover with Pencil or mouse to preview first.',
+  fill: 'Tap a color to fill it. Fill only spreads over the color you tap, so other colors stay as they are. It also stops at sharp edges when that switch is on. Hover with Pencil or mouse to preview first.',
   image: 'Choose an image, then drag it to move it; pinch, twist or drag the blue handle to resize and turn it. Touch outside the image (or Lock it) to turn the model. Apply projects it onto the surfaces facing you; see-through parts of a PNG keep the paint underneath, and a selection limits where it goes.',
   parts: 'Lines + folds: areas inside sculpted outlines (raised details keep their sides, engraved lines get their own strip), plus pieces like arms and legs split where they join. Shape: only where the surface folds. Tap a part to paint it; use Outline for details with no sculpted line.',
   soft: 'Soft brush shades toward the current color a little more each pass. Paint with the area\'s own color to fade shading back. Shading prints as a few mixes (Shade steps), finely speckled so the steps blend.',
