@@ -429,20 +429,197 @@ $('galTile').addEventListener('input', () => {
  * (toolchanger, Snapmaker Orca export, predicted mixes). Saved in localStorage.
  * @param {string} v 'bambu' or 'tc'.
  */
-function setPrinter(v) {
+function setPrinter(v, fromUser) {
+  const was = S.printer;
   S.printer = v === 'tc' ? 'tc' : 'bambu'; store('labcraft.printer', S.printer);
   document.querySelectorAll('#printerSeg button').forEach(b => b.classList.toggle('on', b.dataset.p === S.printer));
   const sel = $('printerSel'); if (sel) sel.value = S.printer;
   printerHint();
   if ($('mixSheet').classList.contains('open')) { $('galNote').textContent = ''; renderGallery(); updateMixReadout(); }
   try { refreshRows(); } catch (_) {}
+  // switching to a toolchanger with more filaments than heads: offer to convert right away
+  if (fromUser && was !== 'tc' && isTC() && physicalPalette().length > CONV_HEADS) openConversion();
 }
 function printerHint() {
   const n = physicalPalette().length, h = $('printerHint'); if (!h) return;
-  h.textContent = isTC() && n > 4 ? 'Most toolchangers (Snapmaker U1, Flashforge Creator 5) hold 4 filaments; this palette has ' + n + '.' : '';
+  if (isTC() && n > CONV_HEADS) {
+    h.innerHTML = 'Toolchangers like the Snapmaker U1 and Flashforge Creator 5 hold 4 filaments; this palette has ' + n + '. <button class="link" id="convOpen">Set up 4 toolheads…</button>';
+    $('convOpen').onclick = openConversion;
+  } else h.textContent = '';
 }
-document.querySelectorAll('#printerSeg button').forEach(b => b.onclick = () => setPrinter(b.dataset.p));
-$('printerSel').onchange = e => setPrinter(e.target.value);
+document.querySelectorAll('#printerSeg button').forEach(b => b.onclick = () => setPrinter(b.dataset.p, true));
+$('printerSel').onchange = e => setPrinter(e.target.value, true);
+// ---------------- convert to 4 toolheads ----------------
+// Toolchangers have 4 heads. Converting keeps 4 of the palette's real filaments, rebuilds every mix
+// that only uses them, and repaints anything that needed a dropped filament with the closest colour
+// the 4 can mix (FilamentMixer, as Full Spectrum previews it). One undo step restores everything.
+const CONV_HEADS = 4;
+let convKeep = [], convPlan = null;
+/** Painted area (mm²) per palette slot; whole palette counts as used when no model is loaded. */
+function usedSlotAreas() {
+  const a = new Map(), m = S.mesh;
+  if (!m) { for (const p of S.palette) a.set(p.slot, 1); return a; }
+  for (let t = 0; t < m.nT; t++) { const s = m.paint[t]; if (s) a.set(s, (a.get(s) || 0) + m.area[t]); }
+  return a;
+}
+/**
+ * Every colour that 4 heads can make: each filament alone, pairs in 5% steps and triples in 5% steps
+ * (each part at least 5%), with FilamentMixer colours.
+ * @param {string[]} hexes Colours of the kept filaments, head order.
+ * @returns {Array<{comps: number[], pc: number[], color: string, lab: number[]}>} comps are 1-based heads.
+ */
+function headCandidates(hexes) {
+  const out = [], push = (comps, pc) => {
+    const color = comps.length === 1 ? hexes[comps[0] - 1] : LabMix.formula(comps.map(c => hexes[c - 1]), pc);
+    out.push({ comps, pc, color, lab: C.hexToLab(color) });
+  };
+  const n = hexes.length;
+  for (let i = 1; i <= n; i++) push([i], [100]);
+  for (let i = 1; i <= n; i++) for (let j = i + 1; j <= n; j++) for (let a = 5; a <= 95; a += 5) push([i, j], [a, 100 - a]);
+  for (let i = 1; i <= n; i++) for (let j = i + 1; j <= n; j++) for (let k = j + 1; k <= n; k++)
+    for (let a = 5; a <= 90; a += 5) for (let b = 5; a + b <= 95; b += 5) push([i, j, k], [a, b, 100 - a - b]);
+  return out;
+}
+const labD = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/**
+ * Work out what converting to the filaments in `keep` would do, without changing anything.
+ * @param {number[]} keep 1-based physical slots to load, in head order.
+ * @returns {{keep: number[], rows: Array, map: Map<number, Object>, cost: number}} rows: one per used
+ *   slot with old colour, new recipe/colour and colour difference (Lab ΔE); cost: area-weighted ΔE.
+ */
+function planConversion(keep) {
+  const head = new Map(keep.map((s, i) => [s, i + 1])), hexes = keep.map(s => S.palette[s - 1].color);
+  const cands = headCandidates(hexes), used = usedSlotAreas(), rows = [];
+  let cost = 0, total = 0;
+  for (const p of S.palette) {
+    const area = used.get(p.slot) || 0;
+    const rec = recipeOf(p.slot);
+    let to = null;
+    if (rec && Object.keys(rec).every(c => head.has(+c))) { // only kept filaments: same recipe on the new heads
+      const cs = Object.keys(rec).map(Number), comps = cs.map(c => head.get(c)), pc = pctOf(cs.map(c => rec[c]));
+      to = { comps, pc, color: comps.length === 1 ? hexes[comps[0] - 1] : LabMix.formula(comps.map(c => hexes[c - 1]), pc), exact: true };
+    } else if (area > 0) { // needs a dropped filament: nearest colour the heads can make
+      const L = C.hexToLab(p.color);
+      let best = null, bd = 1e9;
+      for (const c of cands) { const d = labD(L, c.lab); if (d < bd) { bd = d; best = c; } }
+      to = { comps: best.comps, pc: best.pc, color: best.color, exact: false };
+    }
+    if (!to) continue; // unused and can't be kept: dropped
+    to.d = labD(C.hexToLab(p.color), C.hexToLab(to.color));
+    rows.push({ slot: p.slot, area, from: p, to });
+    if (area > 0 && !to.exact) { cost += to.d * area; }
+    total += area;
+  }
+  return { keep, rows, cost: total ? cost / total : 0 };
+}
+/** The 4 physical filaments that keep the painted colours closest (tries every combination). */
+function suggestHeads() {
+  const phys = physicalPalette().map(p => p.slot);
+  if (phys.length <= CONV_HEADS) return phys;
+  let best = null, bc = 1e18;
+  const pick = (start, acc) => {
+    if (acc.length === CONV_HEADS) { const c = planConversion(acc).cost; if (c < bc) { bc = c; best = acc.slice(); } return; }
+    for (let i = start; i < phys.length; i++) { acc.push(phys[i]); pick(i + 1, acc); acc.pop(); }
+  };
+  pick(0, []);
+  return best;
+}
+function convQuality(d, exact, single) {
+  if (exact) return ['same', single ? 'Same filament' : 'Same recipe']; // any colour shift is only Bambu vs Full Spectrum preview
+  if (d < 6) return ['same', 'Very close'];
+  if (d < 12) return ['close', 'Close'];
+  if (d < 25) return ['off', 'Noticeable'];
+  return ['far', 'Far off'];
+}
+function renderConversion() {
+  const chips = $('convChips'); chips.innerHTML = '';
+  for (const p of physicalPalette()) {
+    const b = document.createElement('button'), on = convKeep.includes(p.slot);
+    b.className = 'chip' + (on ? ' on' : '');
+    b.innerHTML = '<span class="dot" style="background:' + p.color + '"></span><span></span>';
+    b.lastChild.textContent = label(p);
+    b.onclick = () => {
+      if (on) convKeep = convKeep.filter(s => s !== p.slot);
+      else if (convKeep.length < CONV_HEADS) convKeep = convKeep.concat(p.slot).sort((a, c) => a - c);
+      renderConversion();
+    };
+    chips.appendChild(b);
+  }
+  const ok = convKeep.length === CONV_HEADS;
+  $('convGo').disabled = !ok;
+  $('convPick').textContent = ok ? 'Heads 1–4: ' + convKeep.map(s => label(S.palette[s - 1])).join(', ') + '.' : 'Pick ' + (CONV_HEADS - convKeep.length) + ' more.';
+  const list = $('convList'); list.innerHTML = '';
+  convPlan = ok ? planConversion(convKeep) : null;
+  if (!convPlan) { $('convNote').textContent = ''; return; }
+  const used = convPlan.rows.filter(r => r.area > 0).sort((a, b) => (b.to.exact ? 0 : b.to.d) - (a.to.exact ? 0 : a.to.d) || b.area - a.area);
+  const totalA = used.reduce((a, r) => a + r.area, 0) || 1;
+  for (const r of used) {
+    const [cls, txt] = convQuality(r.to.d, r.to.exact, r.to.comps.length === 1), row = document.createElement('div');
+    row.className = 'convrow';
+    row.innerHTML = '<span class="dot" style="background:' + r.from.color + '"></span><span class="arr">→</span><span class="dot" style="background:' + r.to.color + '"></span><span class="nm"><span></span><small></small></span><span class="q ' + cls + '">' + txt + '</span>';
+    row.querySelector('.nm span').textContent = label(r.from);
+    row.querySelector('.nm small').textContent = (r.to.exact ? 'Kept' : 'Becomes ' + r.to.comps.map((c, i) => label(S.palette[convKeep[c - 1] - 1]) + (r.to.comps.length > 1 ? ' ' + r.to.pc[i] + '%' : '')).join(' + ')) + (S.mesh ? ' · ' + Math.max(1, Math.round(100 * r.area / totalA)) + '% of the model' : '');
+    list.appendChild(row);
+  }
+  const far = used.filter(r => !r.to.exact && r.to.d >= 25);
+  $('convNote').textContent = far.length
+    ? far.length + ' color' + (far.length > 1 ? 's' : '') + ' can\'t be matched well with these 4. Try a different set of heads, or keep the filament they need.'
+    : 'Undo puts your colors and palette back.';
+  if (used.some(r => r.to.exact && r.to.comps.length > 1 && r.to.d >= 6)) $('convNote').textContent += ' Mixes marked "Same recipe" keep their recipe; their preview color can look different because Full Spectrum predicts mixes differently than Bambu Studio.';
+}
+/** Open the "Set up 4 toolheads" sheet with the suggested heads selected. */
+function openConversion() {
+  convKeep = suggestHeads();
+  renderConversion();
+  $('convSheet').classList.add('open');
+}
+/** Snapshot of everything a conversion changes, for undo/redo. */
+function convState() {
+  const m = S.mesh, sv = m && m.shade;
+  return { template: S.template, palSource: S.palSource, slot: S.slot, paint: m ? m.paint.slice() : null, nT: m ? m.nT : 0,
+    shade: sv ? { L: sv.L.slice(), slot: sv.slot.slice(), to: sv.to.slice(), base: sv.base.slice() } : null };
+}
+function applyConvState(x) {
+  const m = S.mesh;
+  if (m && x.paint && x.nT === m.nT) { m.paint.set(x.paint); m.shade = x.shade ? { L: x.shade.L.slice(), slot: x.shade.slot.slice(), to: x.shade.to.slice(), base: x.shade.base.slice() } : null; }
+  ramps.clear(); rampOf.clear();
+  S.slot = x.slot;
+  setTemplate(x.template, x.palSource, true);
+  printerHint();
+}
+function runConversion() {
+  if (!convPlan) return;
+  const plan = convPlan, before = convState();
+  let st = C.permuteFilaments(JSON.parse(S.template['Metadata/project_settings.config']), plan.keep.map(s => s - 1)); // heads only
+  const map = new Map(), made = new Map();
+  plan.keep.forEach((s, i) => map.set(s, i + 1));
+  for (const r of plan.rows) {
+    if (r.to.comps.length === 1) { map.set(r.slot, r.to.comps[0]); continue; }
+    const key = r.to.comps.map((c, i) => c + ':' + r.to.pc[i]).sort().join('|');
+    if (!made.has(key)) { st = C.addMix(st, r.to.comps, r.to.pc, r.to.color); made.set(key, st.filament_colour.length); }
+    map.set(r.slot, made.get(key));
+  }
+  const fn = v => (v ? map.get(v) || 1 : 0);
+  const m = S.mesh;
+  if (m) {
+    for (let t = 0; t < m.nT; t++) m.paint[t] = fn(m.paint[t]);
+    const sv = m.shade;
+    if (sv) for (let t = 0; t < sv.slot.length; t++) { sv.slot[t] = sv.slot[t] ? fn(sv.slot[t]) : 0; sv.base[t] = sv.base[t] ? fn(sv.base[t]) : 0; sv.to[t] = sv.to[t] ? fn(sv.to[t]) : 0; }
+  }
+  S.slot = map.get(S.slot) || 1;
+  ramps.clear(); rampOf.clear();
+  const t = Object.assign({}, S.template, { 'Metadata/project_settings.config': JSON.stringify(st) });
+  setTemplate(t, S.palSource.replace(/ \(edited\)$/, '') + ' (4 heads)', true);
+  if (m) { pushStep({ kind: 'convert', before, after: convState() }); updateUndo(); }
+  $('convSheet').classList.remove('open');
+  printerHint();
+  const changed = plan.rows.filter(r => r.area > 0 && !r.to.exact).length;
+  toast('Converted to 4 heads' + (changed ? ': ' + changed + ' color' + (changed > 1 ? 's' : '') + ' replaced with the closest mix.' : '.') + (m ? ' Undo puts it back.' : ''), 5000);
+}
+$('convCancel').onclick = () => $('convSheet').classList.remove('open');
+$('convSheet').addEventListener('click', e => { if (e.target.id === 'convSheet') $('convSheet').classList.remove('open'); });
+$('convGo').onclick = runConversion;
+
 $('galPrint').onclick = () => $('swatchSheet').classList.add('open');
 $('swatchClose').onclick = () => $('swatchSheet').classList.remove('open');
 $('swatchSheet').addEventListener('click', e => { if (e.target.id === 'swatchSheet') $('swatchSheet').classList.remove('open'); });
@@ -1867,6 +2044,7 @@ function undo() {
   const st = S.undo.pop();
   if (st.kind === 'paint') { if (applyPaintStep(st, true)) S.redo.push(st); if (S.sel) openSel(); }
   else if (st.kind === 'sel') { setSelState(st.prev); S.redo.push(st); }
+  else if (st.kind === 'convert') { applyConvState(st.before); S.redo.push(st); }
   else { S.redo.push(snapshot(false)); restore(st); }
   updateUndo();
 }
@@ -1876,6 +2054,7 @@ function redo() {
   const st = S.redo.pop();
   if (st.kind === 'paint') { if (applyPaintStep(st, false)) S.undo.push(st); if (S.sel) openSel(); }
   else if (st.kind === 'sel') { setSelState(st.next); S.undo.push(st); }
+  else if (st.kind === 'convert') { applyConvState(st.after); S.undo.push(st); }
   else { S.undo.push(snapshot(false)); restore(st); }
   updateUndo();
 }
@@ -2876,6 +3055,7 @@ $('checkClose').onclick = endChecks;
 
 // ---------------- export ----------------
 $('bExport').onclick = () => {
+  if (isTC() && physicalPalette().length > CONV_HEADS) { openConversion(); return; } // must fit the heads first
   $('expName').value = S.name;
   $('expNote').textContent = downloads
     ? 'Inside Claude, files can only be saved as .zip. You\'ll get "' + S.name + '.3mf.zip": rename it to end in .3mf (in Files: press and hold, Rename), then open it in Bambu Studio.'

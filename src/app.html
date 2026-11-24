@@ -257,6 +257,15 @@ input::placeholder,textarea::placeholder{color:#8a8f98;-webkit-text-fill-color:#
 #fBrand button{flex:1}
 .privacy{font-size:12px;color:var(--muted);margin:14px 0 0}
 .about a{color:var(--accent)}
+.convlist{display:flex;flex-direction:column;gap:6px;margin:10px 0 4px;max-height:44vh;overflow:auto}
+.convrow{display:grid;grid-template-columns:30px 16px 30px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px}
+.convrow .dot{width:30px;height:30px;border-radius:50%;border:1px solid var(--line)}
+.convrow .arr{color:var(--muted);text-align:center}
+.convrow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.convrow .nm small{display:block;color:var(--muted)}
+.convrow .q{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.q.same{background:var(--ok-bg);color:var(--ok-ink)}.q.close{background:var(--sel);color:var(--on-ink)}.q.off{background:var(--tag-bg);color:var(--tag-ink)}.q.far{background:var(--bad-bg);color:var(--danger)}
+#printerHint .link{padding:0 2px;font-size:12px}
 .swlist{margin:6px 0 10px;padding-left:20px;font-size:14px;line-height:1.45}.swlist li{margin:3px 0}
 .fine{font-size:12px;color:var(--muted)}
 .galnote{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px}
@@ -436,6 +445,15 @@ input::placeholder,textarea::placeholder{color:#8a8f98;-webkit-text-fill-color:#
   <div class="foot"><button class="btn" id="cClean">Clean up islands</button><button class="btn primary" id="cShow">Show on model</button></div>
 </div></div>
 
+<div class="sheet" id="convSheet"><div class="card" style="width:min(540px,100%)">
+  <h2>Set up 4 toolheads</h2>
+  <p>Toolchangers like the Snapmaker U1 and Flashforge Creator 5 have 4 heads. Pick the 4 filaments to load. Colors that need the others are replaced with the closest color your 4 can mix.</p>
+  <div class="chips" id="convChips"></div>
+  <div class="fine" id="convPick"></div>
+  <div class="convlist" id="convList"></div>
+  <p class="fine" id="convNote"></p>
+  <div class="foot"><button class="btn" id="convCancel">Not now</button><button class="btn primary" id="convGo">Convert</button></div>
+</div></div>
 <div class="sheet" id="swatchSheet"><div class="card">
   <h2>Print the swatch tiles</h2>
   <p>Every mix in this gallery has a numbered tile you can print with Bambu PLA Palette Cyan, Magenta, Yellow, Black and White, plus frames that hold them in families. The number on the back of each tile is the number shown on its mix here, and you can type it in the Tile # box to jump to that mix.</p>
