@@ -1647,7 +1647,9 @@ function colorArea(t) {
 }
 function startGradient(hit) {
   const m = S.mesh;
-  const area = S.sel && S.sel.mask[hit.t] ? S.sel.list.slice() : colorArea(hit.t);
+  // Only the colour under the Pencil at the start (with its shading); a selection just limits it further.
+  if (S.sel && !S.sel.mask[hit.t]) return null;
+  const area = colorArea(hit.t);
   if (!area.length) return null;
   const s = S.slot, pairs = new Map(), st = new Array(area.length);
   area.forEach((t, i) => {
@@ -2503,7 +2505,7 @@ const HINTS = {
   image: 'Choose an image, then drag it to move it; pinch, twist or drag the blue handle to resize and turn it. Touch outside the image (or Lock it) to turn the model. Apply projects it onto the surfaces facing you; see-through parts of a PNG keep the paint underneath, and a selection limits where it goes.',
   parts: 'Lines + folds: areas inside sculpted outlines (raised details keep their sides, engraved lines get their own strip), plus pieces like arms and legs split where they join. Shape: only where the surface folds. Tap a part to paint it; use Outline for details with no sculpted line.',
   soft: 'Soft brush shades toward the current color a little more each pass. Paint with the area\'s own color to fade shading back. Shading prints as a few mixes (Shade steps), finely speckled so the steps blend.',
-  gradient: 'Start on a color and drag: that color area (only that color) shades from its own color where you start to the current color where you lift. Inside a selection, the selection is used instead. Smooth up/down lets Bambu Studio blend layer by layer (plain filaments only, bottom-to-top).',
+  gradient: 'Start on a color and drag: that color area (only that color) shades from its own color where you start to the current color where you lift. With a selection, only that color inside the selection. Smooth up/down lets Bambu Studio blend layer by layer (plain filaments only, bottom-to-top).',
   select: 'Tap a color area to select it, or draw around an area to select a shape (Streamline smooths your stroke). Use + Add / − Subtract to build a shape from several strokes, then Paint fills it, or switch to Brush or Fill to paint inside it.',
   selectOld: 'Tap a color area to select it, or draw around an area to select a shape. Use + Add / − Subtract to build a shape from several strokes, then Paint fills it.'
 };
