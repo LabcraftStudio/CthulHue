@@ -266,6 +266,8 @@ input::placeholder,textarea::placeholder{color:#8a8f98;-webkit-text-fill-color:#
 .convrow .q{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px;white-space:nowrap}
 .q.same{background:var(--ok-bg);color:var(--ok-ink)}.q.close{background:var(--sel);color:var(--on-ink)}.q.off{background:var(--tag-bg);color:var(--tag-ink)}.q.far{background:var(--bad-bg);color:var(--danger)}
 #printerHint .link{padding:0 2px;font-size:12px}
+#palReset{display:block;margin:4px 0 0 2px}
+@media (max-width: 900px){ #palReset{display:none} }
 .swlist{margin:6px 0 10px;padding-left:20px;font-size:14px;line-height:1.45}.swlist li{margin:3px 0}
 .fine{font-size:12px;color:var(--muted)}
 .galnote{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px}
@@ -407,7 +409,7 @@ input::placeholder,textarea::placeholder{color:#8a8f98;-webkit-text-fill-color:#
   <div class="hint" id="hint"></div>
 </div>
 
-<div id="palette"><button class="minbtn" id="paletteMin" aria-label="Collapse filaments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button><h3><span>Filaments <span id="palSrc" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span><button class="link" id="bRename">Rename</button></h3><div id="swatches"></div><div class="addrow"><button class="mixbtn" id="bAddFil">+ Add filament</button><button class="mixbtn" id="bNewMix">+ New mix</button></div><label class="printersel"><span>Printer</span><select id="printerSel"><option value="bambu">Bambu AMS</option><option value="tc">Toolchanger</option></select></label><div class="palhint">Edit changes a mix recipe, or renames and removes a filament.</div></div>
+<div id="palette"><button class="minbtn" id="paletteMin" aria-label="Collapse filaments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button><h3><span>Filaments <span id="palSrc" style="text-transform:none;letter-spacing:0;font-weight:400"></span></span><button class="link" id="bRename">Rename</button></h3><div id="swatches"></div><div class="addrow"><button class="mixbtn" id="bAddFil">+ Add filament</button><button class="mixbtn" id="bNewMix">+ New mix</button></div><label class="printersel"><span>Printer</span><select id="printerSel"><option value="bambu">Bambu AMS</option><option value="tc">Toolchanger</option></select></label><button class="link" id="palReset">Reset to default filaments</button><div class="palhint">Edit changes a mix recipe, or renames and removes a filament.</div></div>
 
 <div id="empty">
   <div class="card">

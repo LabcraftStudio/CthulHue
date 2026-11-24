@@ -63,6 +63,38 @@ let names = load('labcraft.names', {});
 // Colors Bambu Studio has shown for mix recipes, learned from projects you open.
 let learned = load('labcraft.mixcolors', {});
 function recipeKey(comps, weights, pal) { return C.mixKey(comps.map(c => (pal[c - 1] || {}).color || '#808080'), weights); }
+// Mixes the user made on purpose (New mix sheet, Load palette), as recipe keys. Other mixes (shading
+// steps, image-projection mixes) belong to one project and are cleared when a new model is opened.
+let userMixes = new Set(load('labcraft.userMixes', null) || (() => {
+  const st = JSON.parse(window.DEFAULT_TEMPLATE['Metadata/project_settings.config']), pal = C.parsePalette(st);
+  return pal.filter(p => p.mixed).map(p => C.mixKey(p.components.map(c => pal[c - 1].color), p.ratios));
+})());
+/** Remember the mixes in `pal` as the user's own, so new models keep them. */
+function markUserMixes(pal) {
+  for (const p of pal) if (p.mixed && p.components) userMixes.add(C.mixKey(p.components.map(c => (pal[c - 1] || {}).color || '#808080'), p.ratios));
+  store('labcraft.userMixes', [...userMixes]);
+}
+/**
+ * Before a new model: drop mixes left over from the last project (anything not made by the user).
+ * Real filaments and the user's own mixes stay. Renumbers paint for the (not yet loaded) model.
+ * @returns {number} How many mixes were removed.
+ */
+function tidyPaletteForNewModel() {
+  let st = JSON.parse(S.template['Metadata/project_settings.config']), n = 0;
+  const pal = C.parsePalette(st);
+  for (let i = pal.length - 1; i >= 0; i--) {
+    const p = pal[i]; if (!p.mixed) continue;
+    const key = C.mixKey((p.components || []).map(c => (pal[c - 1] || {}).color || '#808080'), p.ratios || []);
+    if (!p.gradient && userMixes.has(key)) continue;
+    st = C.deleteSlot(st, p.slot); n++;
+  }
+  if (!n) return 0;
+  ramps.clear(); rampOf.clear();
+  if (S.slot > physicalPalette().length) S.slot = 1;
+  const t = Object.assign({}, S.template, { 'Metadata/project_settings.config': JSON.stringify(st) });
+  setTemplate(t, S.palSource, true);
+  return n;
+}
 function learnMixColors(pal) {
   let changed = false;
   for (const p of pal) {
@@ -616,6 +648,19 @@ function runConversion() {
   const changed = plan.rows.filter(r => r.area > 0 && !r.to.exact).length;
   toast('Converted to 4 heads' + (changed ? ': ' + changed + ' color' + (changed > 1 ? 's' : '') + ' replaced with the closest mix.' : '.') + (m ? ' Undo puts it back.' : ''), 5000);
 }
+/** Back to the built-in Bambu PLA Palette CMYKW filaments. Paint maps to the nearest colour; undoable. */
+$('palReset').onclick = () => {
+  const before = S.mesh ? convState() : null, old = S.palette;
+  const t = {}; for (const [p, v] of Object.entries(window.DEFAULT_TEMPLATE)) t[p] = typeof v === 'string' ? v : b64ToBytes(v.b64);
+  const fresh = C.parsePalette(JSON.parse(t['Metadata/project_settings.config']));
+  const map = old.map(p => C.nearestSlot(p.color, fresh));
+  if (S.mesh) { const m = S.mesh; for (let i = 0; i < m.nT; i++) m.paint[i] = m.paint[i] ? map[m.paint[i] - 1] || 1 : 0; m.shade = null; }
+  S.slot = 1; ramps.clear(); rampOf.clear();
+  setTemplate(t, 'Default', true);
+  printerHint();
+  if (before) { pushStep({ kind: 'convert', before, after: convState() }); updateUndo(); }
+  toast('Back to the default filaments' + (S.mesh ? '. Colors were matched to the nearest filament; undo puts them back.' : '.'), 5000);
+};
 $('convCancel').onclick = () => $('convSheet').classList.remove('open');
 $('convSheet').addEventListener('click', e => { if (e.target.id === 'convSheet') $('convSheet').classList.remove('open'); });
 $('convGo').onclick = runConversion;
@@ -714,6 +759,7 @@ $('mSave').onclick = () => {
     S.slot = S.palette.length; renderPalette(); status();
     toast('Added mix as slot ' + S.slot + ' and selected it.');
   }
+  userMixes.add(C.mixKey(mixEdit.comps.map(c => S.palette[c - 1].color), pc)); store('labcraft.userMixes', [...userMixes]);
   $('mixSheet').classList.remove('open');
 };
 /**
@@ -2883,6 +2929,7 @@ async function openModelFile(file) {
   toast('Loading ' + file.name + '…', 60000);
   await new Promise(r => setTimeout(r, 30));
   try {
+    tidyPaletteForNewModel(); // leftovers from the last project would otherwise match file colours too
     const buf = await file.arrayBuffer();
     let res, msgs = [];
     if (ext === 'stl') res = C.parseSTL(buf);
@@ -2935,6 +2982,7 @@ async function openPaletteFile(file) {
     const files = await readZip(await file.arrayBuffer());
     if (typeof files['Metadata/project_settings.config'] !== 'string') throw new Error('that 3MF has no Bambu project settings in it. Save it from Bambu Studio as a project.');
     setTemplate(templateOf(files), file.name.replace(/\.3mf$/i, ''), true);
+    markUserMixes(S.palette); // a loaded palette's mixes are the user's choice
     toast('Palette loaded: ' + S.palette.length + ' filaments (' + S.palette.filter(p => p.mixed).length + ' mixes). It will be remembered on this device.', 5000);
   } catch (err) { toast('Could not read palette: ' + err.message, 6000); }
 }
@@ -2983,6 +3031,7 @@ $('eSample').onclick = async () => {
   $('eSample').disabled = true;
   try {
     const m = await loadSampleMesh();
+    tidyPaletteForNewModel();
     const paint = new Uint8Array(m.tris.length / 3).fill(Math.min(5, S.palette.length)); // start white so colors show up
     S.name = 'Sample octopus';
     setMesh(m.verts, m.tris, paint);
@@ -3160,5 +3209,6 @@ $('xGo').onclick = async () => {
 
 // ---------------- start ----------------
 setTemplate(loadDefaultTemplate(), S.palSource, false);
+tidyPaletteForNewModel(); // no model survives a reload, so last project's shading mixes have nothing to colour
 selectTool('brush');
 window.__lab = { cube: () => cube, applyDecal: () => applyDecal(), decal: () => decal, setDecal: d => { Object.assign(decal, d); showDecal(); }, refineShading: m => refineShading(m), S, pick, setMesh, C, camera, controls, paintColor: t => paintColor(t), colorAttr: () => colorAttr, ants: () => ({ dashed: antDash.dashed, defines: Object.assign({}, antDash.defines), dashSize: antDash.dashSize, gap: antDash.gapSize, scale: antDash.dashScale, offset: antDash.dashOffset, segs: antsDash ? antsDash.geometry.attributes.instanceStart.count : 0, dist: antsDash && antsDash.geometry.attributes.instanceDistanceStart ? Array.from(antsDash.geometry.attributes.instanceDistanceStart.array.slice(0, 6)) : null }) };
