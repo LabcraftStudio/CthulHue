@@ -2881,6 +2881,7 @@ window.SNORCA_TEMPLATE={"[Content_Types].xml": "<?xml version=\"1.0\" encoding=\
   <div class="row" data-for="fill"><label>Fill</label><div class="seg2" id="fillModeSeg" style="width:100%"><button data-f="solid" style="flex:1">Solid</button><button data-f="gradient" style="flex:1">Gradient</button></div></div>
   <div class="toggle" data-for="fill" id="rowSmoothGrad"><span>Smooth up/down (Bambu gradient)</span><button class="switch" id="tSmoothGrad" aria-label="Smooth up/down gradient"></button></div>
   <div class="row" data-for="brush fill" id="rowSteps"><label>Shade steps <b id="stepsVal">4</b></label><input type="range" id="shSteps" min="2" max="6" step="1" value="6"></div>
+  <div class="toggle" data-for="fill" id="rowFillShade"><span>Shading counts as one color</span><button class="switch" id="tFillShade" aria-label="Fill a color together with its shading"></button></div>
   <div class="toggle" data-for="fill" id="rowEdges"><span>Also stop at sharp edges</span><button class="switch" id="tEdges" aria-label="Stop at sharp edges"></button></div>
   <div class="row" data-for="fill" id="rowAngle"><label>Edge angle <b id="angleVal">30°</b></label><input type="range" id="angle" min="1" max="89" step="1" value="30"></div>
   <div class="row" data-for="parts"><label>Split by</label><div class="seg2" id="splitSeg" style="width:100%"><button data-m="lines" class="on" style="flex:1">Lines + folds</button><button data-m="shape" style="flex:1">Shape</button></div></div>
@@ -3114,7 +3115,7 @@ const S = {
   mesh: null, // {verts, tris, paint, wall, adj, normals, cent, area, nT}
   segs: [],   // outline segments, flat [ax,ay,az,bx,by,bz,...]; walls point into this (append-only)
   lines: [],  // outline polylines for display: Float32Array of xyz (already lifted off the surface)
-  edges: load('labcraft.edges', false), imgColors: load('labcraft.imgColors', 'mix'), imgMixes: load('labcraft.imgMixes', 8), imgDetail: load('labcraft.imgDetail', 0.5), imgOpacity: load('labcraft.imgOpacity', 55), brushMode: load('labcraft.brushMode', 'hard'), flow: load('labcraft.flow', 25), shSteps: load('labcraft.shSteps', 6), fillMode: load('labcraft.fillMode', 'solid'), smoothGrad: load('labcraft.smoothGrad', false), printer: load('labcraft.printer', 'bambu'), sym: 'off', symCtr: null, symSetting: false, symTaps: [], selMode: 'new', free: load('labcraft.free', false), creases: load('labcraft.creases', false), cavity: load('labcraft.cavity', false),
+  edges: load('labcraft.edges', false), fillShade: load('labcraft.fillShade', false), imgColors: load('labcraft.imgColors', 'mix'), imgMixes: load('labcraft.imgMixes', 8), imgDetail: load('labcraft.imgDetail', 0.5), imgOpacity: load('labcraft.imgOpacity', 55), brushMode: load('labcraft.brushMode', 'hard'), flow: load('labcraft.flow', 25), shSteps: load('labcraft.shSteps', 6), fillMode: load('labcraft.fillMode', 'solid'), smoothGrad: load('labcraft.smoothGrad', false), printer: load('labcraft.printer', 'bambu'), sym: 'off', symCtr: null, symSetting: false, symTaps: [], selMode: 'new', free: load('labcraft.free', false), creases: load('labcraft.creases', false), cavity: load('labcraft.cavity', false),
   slot: 1, tool: 'brush', size: 3, angle: 30, detail: 0.35, stream: load('labcraft.stream', 60), pressure: true, finger: false,
   parts: null, partsMethod: 'lines', showParts: true, sel: null, step: 1, smooth: 2,
   undo: [], redo: [], name: 'Painted model', checking: false,
@@ -4968,11 +4969,38 @@ function region(t) {
   let R, colorOnly = null;
   // Fill works like a paint bucket: it spreads only over the colour that was tapped, so neighbouring
   // colours (and earlier work) are never painted over. Sharp edges can stop it too (Edges switch).
-  if (S.tool === 'fill') { R = C.smartFill(seed, S.edges ? S.angle : 180, m.adj, m.normals, mark, m.wall, m.paint); colorOnly = m.paint[seed]; }
+  // With "Shading counts as one color" on, a colour and the shading mixes made from it fill together.
+  if (S.tool === 'fill' && S.fillShade) R = shadeAwareFill(seed, S.edges ? S.angle : 180);
+  else if (S.tool === 'fill') { R = C.smartFill(seed, S.edges ? S.angle : 180, m.adj, m.normals, mark, m.wall, m.paint); colorOnly = m.paint[seed]; }
   else if (S.tool === 'parts') return partTris(t);
   else { R = C.sameColorFill(seed, m.adj, m.paint, mark, m.wall); colorOnly = m.paint[seed]; }
   if (S.lines.length) R = R.concat(C.absorbWalls(R, m.adj, m.wall, S.segs, m.normals, m.cent, m.paint, colorOnly));
   return R;
+}
+/**
+ * Like C.smartFill with paint, but compares base colours (baseColorOf), so a colour's shading steps
+ * belong to its area. Still stops at outlines and, below cos(angleDeg), at sharp edges.
+ * @param {number} seed Start triangle (not on an outline).
+ * @param {number} angleDeg Max bend between neighbours; 180 = no limit.
+ * @returns {number[]} Triangles to fill.
+ */
+function shadeAwareFill(seed, angleDeg) {
+  const m = S.mesh, B = baseColorOf(seed), cosT = angleDeg >= 180 ? -2 : Math.cos(angleDeg * Math.PI / 180);
+  const seen = new Uint8Array(m.nT), out = [seed], st = [seed];
+  seen[seed] = 1;
+  while (st.length) {
+    const t = st.pop();
+    for (let e = 0; e < 3; e++) {
+      const n = m.adj[t * 3 + e];
+      if (n < 0 || seen[n] || m.wall[n] >= 0) continue;
+      const d = m.normals[t * 3] * m.normals[n * 3] + m.normals[t * 3 + 1] * m.normals[n * 3 + 1] + m.normals[t * 3 + 2] * m.normals[n * 3 + 2];
+      if (d < cosT - 1e-6) continue;
+      seen[n] = 1;
+      if (baseColorOf(n) !== B) continue;
+      out.push(n); st.push(n);
+    }
+  }
+  return out;
 }
 function applyTris(list) {
   const p = S.mesh.paint, s = S.slot;
@@ -5359,7 +5387,7 @@ for (const id of ['tools', 'palette']) {
 const HINTS = {
   brush: 'Pencil paints, fingers turn and zoom. With a mouse: left paints, right drag turns, shift + right drag pans.',
   outline: 'Draw a line on the model; Fill stops at it. End near where you started to close the shape. Streamline smooths out hand wobble (higher = smoother, slightly less exact). Smaller line detail = crisper color edge.',
-  fill: 'Tap a color to fill it. Fill only spreads over the color you tap, so other colors stay as they are. It also stops at sharp edges when that switch is on. Hover with Pencil or mouse to preview first.',
+  fill: 'Tap a color to fill it. Fill only spreads over the color you tap, so other colors stay as they are. Turn on "Shading counts as one color" to fill a color together with its shading. It also stops at sharp edges when that switch is on. Hover with Pencil or mouse to preview first.',
   image: 'Choose an image, then drag it to move it; pinch, twist or drag the blue handle to resize and turn it. Touch outside the image (or Lock it) to turn the model. Apply projects it onto the surfaces facing you; see-through parts of a PNG keep the paint underneath, and a selection limits where it goes.',
   parts: 'Lines + folds: areas inside sculpted outlines (raised details keep their sides, engraved lines get their own strip), plus pieces like arms and legs split where they join. Shape: only where the surface folds. Tap a part to paint it; use Outline for details with no sculpted line.',
   soft: 'Soft brush shades toward the current color a little more each pass. Paint with the area\'s own color to fade shading back. Shading prints as a few mixes (Shade steps), finely speckled so the steps blend.',
@@ -5372,6 +5400,7 @@ function refreshRows() {
   show('rowImgMixes', tool === 'image' && S.imgColors === 'mix');
   show('rowAngle', tool === 'fill' && S.edges && S.fillMode === 'solid');
   show('rowEdges', tool === 'fill' && S.fillMode === 'solid');
+  show('rowFillShade', tool === 'fill' && S.fillMode === 'solid');
   show('rowFlow', tool === 'brush' && S.brushMode === 'soft');
   show('rowSteps', (tool === 'brush' && S.brushMode === 'soft') || (tool === 'fill' && S.fillMode === 'gradient'));
   show('rowSmoothGrad', tool === 'fill' && S.fillMode === 'gradient' && !isTC());
@@ -5412,6 +5441,8 @@ $('flow').value = S.flow; $('flowVal').textContent = S.flow + '%';
 $('flow').oninput = e => { S.flow = +e.target.value; store('labcraft.flow', S.flow); $('flowVal').textContent = S.flow + '%'; };
 $('shSteps').value = S.shSteps; $('stepsVal').textContent = S.shSteps;
 $('shSteps').oninput = e => { S.shSteps = +e.target.value; store('labcraft.shSteps', S.shSteps); $('stepsVal').textContent = S.shSteps; };
+$('tFillShade').classList.toggle('on', S.fillShade);
+$('tFillShade').onclick = e => { S.fillShade = !S.fillShade; store('labcraft.fillShade', S.fillShade); e.currentTarget.classList.toggle('on', S.fillShade); clearPreview(); };
 $('tSmoothGrad').classList.toggle('on', S.smoothGrad);
 $('tSmoothGrad').onclick = e => { S.smoothGrad = !S.smoothGrad; store('labcraft.smoothGrad', S.smoothGrad); e.currentTarget.classList.toggle('on', S.smoothGrad); };
 $('tPressure').onclick = e => { S.pressure = !S.pressure; e.currentTarget.classList.toggle('on', S.pressure); };
