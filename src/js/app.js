@@ -81,16 +81,17 @@ function markUserMixes(pal) {
  */
 function tidyPaletteForNewModel() {
   let st = JSON.parse(S.template['Metadata/project_settings.config']), n = 0;
-  const pal = C.parsePalette(st);
+  const pal = C.parsePalette(st), onModel = new Set(S.mesh ? S.mesh.paint : []), gone = [];
   for (let i = pal.length - 1; i >= 0; i--) {
-    const p = pal[i]; if (!p.mixed) continue;
+    const p = pal[i]; if (!p.mixed || onModel.has(p.slot)) continue; // never pull a colour out from under the open model
     const key = C.mixKey((p.components || []).map(c => (pal[c - 1] || {}).color || '#808080'), p.ratios || []);
     if (!p.gradient && userMixes.has(key)) continue;
-    st = C.deleteSlot(st, p.slot); n++;
+    st = C.deleteSlot(st, p.slot); n++; gone.push(p.slot);
   }
   if (!n) return 0;
+  if (S.mesh) remapSlots(v => v - gone.filter(d => d < v).length); // only removed slots move the rest
   ramps.clear(); rampOf.clear();
-  if (S.slot > physicalPalette().length) S.slot = 1;
+  S.slot = gone.includes(S.slot) ? 1 : S.slot - gone.filter(d => d < S.slot).length;
   const t = Object.assign({}, S.template, { 'Metadata/project_settings.config': JSON.stringify(st) });
   setTemplate(t, S.palSource, true);
   return n;
@@ -768,14 +769,24 @@ $('mSave').onclick = () => {
  * @param {function(number): number} fn Old 1-based slot → new slot (0 stays unpainted).
  */
 function remapSlots(fn) {
-  const fix = a => { for (let i = 0; i < a.length; i++) a[i] = fn(a[i]); };
+  const done = new Set(); // snapshots can share one paint array; renumber each array once
+  const fix = a => { if (!a || done.has(a)) return; done.add(a); for (let i = 0; i < a.length; i++) a[i] = fn(a[i]); };
+  const fixSel = s => { if (s && s.color) s.color = fn(s.color); };
   if (S.mesh) fix(S.mesh.paint);
+  if (S.mesh && S.mesh.shade) { const sv = S.mesh.shade; for (const a of [sv.slot, sv.base, sv.to]) for (let i = 0; i < a.length; i++) if (a[i]) a[i] = fn(a[i]); }
+  // A toolhead conversion or palette reset changes the whole palette, so history older than it
+  // can't be renumbered with this change: drop it (undo stops at that point).
+  for (const [list, keepAfter] of [[S.undo, true], [S.redo, true]]) {
+    const i = list.map(st => st.kind).lastIndexOf('convert');
+    if (keepAfter && i >= 0) list.splice(0, i + 1);
+  }
   for (const st of S.undo.concat(S.redo)) {
     if (st.kind === 'paint') { fix(st.from); fix(st.to); continue; }
-    if (S.mesh && st.paint === S.mesh.paint) continue;
-    fix(st.paint);
+    if (st.kind === 'sel') { fixSel(st.prev); fixSel(st.next); continue; } // selections carry no paint
+    fix(st.paint); fixSel(st.sel);
   }
   if (S.sel) S.sel.color = fn(S.sel.color);
+  updateUndo();
 }
 $('mDelete').onclick = () => {
   const slot = mixEdit.slot;
