@@ -481,8 +481,10 @@
 
   // Flood across edges whose dihedral angle is below the threshold (like Bambu's smart fill).
   // wall (optional): Int32Array, >=0 marks triangles on a drawn outline; floods never enter them.
-  function smartFill(seed, angleDeg, adj, normals, mark, wall) {
+  // paint (optional): only spread over triangles of the seed's colour (the Fill tool passes it).
+  function smartFill(seed, angleDeg, adj, normals, mark, wall, paint) {
     const cosT = angleDeg >= 180 ? -2 : Math.cos(angleDeg * Math.PI / 180);
+    const col = paint ? paint[seed] : 0;
     const out = [];
     const stack = [seed];
     mark.fill(0);
@@ -493,6 +495,7 @@
       for (let e = 0; e < 3; e++) {
         const n = adj[t * 3 + e];
         if (n < 0 || mark[n] || (wall && wall[n] >= 0)) continue;
+        if (paint && paint[n] !== col) continue; // paint-bucket: stay inside the tapped colour
         const d = normals[t * 3] * normals[n * 3] + normals[t * 3 + 1] * normals[n * 3 + 1] + normals[t * 3 + 2] * normals[n * 3 + 2];
         if (d >= cosT - 1e-6) { mark[n] = 1; stack.push(n); }
       }
