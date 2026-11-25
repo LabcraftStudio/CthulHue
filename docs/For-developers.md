@@ -33,14 +33,7 @@ python3 -m http.server   # then open http://localhost:8000/
 The help lives in `docs/` as Markdown, one file per page. The same files feed two places:
 
 - **The help site** at https://labcraftstudio.github.io/CthulHue/help/. `python3 build_help.py` turns `docs/*.md` into `help/*.html` (no extra packages needed). Commit both.
-- **The GitHub wiki.** The wiki is its own git repository. To update it, copy the pages over and push:
-
-```
-git clone https://github.com/LabcraftStudio/CthulHue.wiki.git
-cp docs/*.md CthulHue.wiki/
-mkdir -p CthulHue.wiki/images && cp docs/images/* CthulHue.wiki/images/
-cd CthulHue.wiki && git add -A && git commit -m "Update help" && git push
-```
+- **The GitHub wiki.** The workflow `.github/workflows/wiki.yml` copies `docs/` to the wiki whenever the pages change on main (or when you run it by hand from the Actions tab). Edit the pages here, not in the wiki: wiki edits are overwritten on the next sync.
 
 Links between pages are written without an extension, like `[Toolchangers](Toolchangers)`, which works in the wiki; `build_help.py` adds `.html` for the site. `_Sidebar.md` and `_Footer.md` are only used by the wiki.
 

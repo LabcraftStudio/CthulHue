@@ -1,0 +1,41 @@
+# Copies the help pages in docs/ to the GitHub wiki whenever they change on main,
+# so the wiki and the help site (help/, built from the same files) always match.
+# Edit the pages in docs/, not in the wiki: wiki edits are overwritten on the next sync.
+name: Sync help to wiki
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy docs/ to the wiki
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki
+          cp docs/*.md wiki/
+          mkdir -p wiki/images
+          cp docs/images/* wiki/images/
+          cd wiki
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update help from docs/ (${GITHUB_SHA::7})"
+          git push

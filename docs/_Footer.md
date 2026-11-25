@@ -1,1 +1,1 @@
-These pages are also on the [CthulHue help site](https://labcraftstudio.github.io/CthulHue/help/). They're written in the main repository's `docs/` folder, so edit them there. Problems or ideas? [Open an issue](https://github.com/LabcraftStudio/CthulHue/issues).
+These pages are also on the [CthulHue help site](https://labcraftstudio.github.io/CthulHue/help/). They're copied here automatically from the main repository's `docs/` folder, so edit them there. Problems or ideas? [Open an issue](https://github.com/LabcraftStudio/CthulHue/issues).
