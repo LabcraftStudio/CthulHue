@@ -5,6 +5,8 @@ Open a model, paint it with your filaments and color mixes, and export a project
 
 **Use it here: https://labcraftstudio.github.io/CthulHue/**
 
+**Help and guides: https://labcraftstudio.github.io/CthulHue/help/** (also in this repository's [wiki](https://github.com/LabcraftStudio/CthulHue/wiki))
+
 Made for iPad and Apple Pencil, and works with a mouse on a computer too. By Sarah at Labcraft Studio.
 
 ## What it does
@@ -30,6 +32,8 @@ Everything runs on your device. Models and images are never uploaded, and the ap
 4. **Paint.** Pick a color in the Filaments panel, then use Brush, Fill, Image or Select. Pencil paints; fingers turn and zoom. The view cube in the corner snaps to front, side and top views.
 5. **Export 3MF** and open the file in your slicer. Set your real filament presets there before printing.
 
+More in the [Getting started guide](https://labcraftstudio.github.io/CthulHue/help/Getting-started.html).
+
 Tips:
 - Mixed colors look best on walls and slopes. On flat tops and undersides you mostly see the outermost layer.
 - For toolchangers, thin layers (0.08–0.12 mm) and translucent filaments blend best.
@@ -49,39 +53,15 @@ Designed by Sarah at Labcraft Studio. Built with Claude, an AI model made by Ant
 
 ## For developers
 
-CthulHue is plain JavaScript with no framework and no package manager. The page in the repository
-root, `index.html`, is generated: edit the files in `src/`, then run
+CthulHue is plain JavaScript with no framework and no package manager. Edit the files in `src/`, then run
 
 ```
-python3 build.py
-python3 -m http.server   # then open http://localhost:8000/
+python3 build.py        # builds index.html, the app
+python3 build_help.py   # builds help/ from the Markdown pages in docs/
+python3 -m http.server  # then open http://localhost:8000/
 ```
 
-### How the code is organized
-
-| File | What it does |
-| --- | --- |
-| `src/app.html` | Page shell: markup and CSS for every panel and sheet. Night mode overrides the CSS colour variables. |
-| `src/js/core.js` | No-UI functions (`LabCore`): STL/3MF import, the `paint_color` codec, mesh topology and refinement, editing filament settings, shading patterns and 3MF export. Runs in Node too. |
-| `src/js/app.js` | The interface: 3D view (three.js), tools, palette and mix editor, undo, image projection, Bambu and Snapmaker export. Starts with a map of its sections. |
-| `src/js/mixer.js` | Mix colour prediction (`LabMix`): Bambu's measured mixes, then the FilamentMixer formula that Bambu Studio and Snapmaker Orca also use. |
-| `src/js/sample.js` | Backup "Try a sample" octopus, built procedurally if `samples/octopus.zip` can't load. |
-| `src/data/` | Data, not to be edited by hand: Bambu's measured mixes, filament catalogs, swatch tile numbers and the Bambu Studio and Snapmaker Orca project templates. Each file says where it came from. |
-| `lib/` | three.js, three-mesh-bvh and JSZip, with their licenses. |
-
-### Things that are easy to get wrong
-
-- **Slicers only load mixes from their own projects.** Bambu Studio needs the 3MF's Application
-  metadata to start with `BambuStudio-`, Snapmaker Orca with `Snapmaker_Orca-`. Anything else
-  silently loads mixes as plain filaments.
-- **Paint is one 1-based filament slot per triangle**, written as `paint_color` codes (slot 1 = `4`,
-  2 = `8`, 3+ = `<n-3>C`). Bambu requires every real spool before every mix, so adding a filament
-  renumbers the paint (`remapSlots` in app.js).
-- **Mixes:** Bambu stores them in the filament arrays (`filament_is_mixed`, up to 3 filaments, 64
-  mixes). Snapmaker Orca stores them in `mixed_filament_definitions`, numbered after the 4 heads.
-- **Shading prints as patterns of mixes**: horizontal stripes on walls and dots on flat faces
-  (`shadeThreshold` in core.js), because tiny specks printed bumpy.
-- **The Outline and Parts tools** are still in the code but have no toolbar buttons since v1.
+How the code is organized, the parts that are easy to get wrong, and how the wiki is updated: see [For developers](https://labcraftstudio.github.io/CthulHue/help/For-developers.html) (source: `docs/For-developers.md`).
 
 Contributions are welcome under the same license. Please open an issue first for big changes.
 
@@ -93,4 +73,4 @@ Please [open an issue](https://github.com/LabcraftStudio/CthulHue/issues).
 
 CthulHue is free software under the [GNU Affero General Public License v3.0](LICENSE). You may use, study, change and share it. If you share a changed version, including running it as a website, you must share its source code under the same license.
 
-The app is a single page, `index.html`. The swatch tile files are in `swatches/`.
+The app is a single page, `index.html`. The help site is in `help/` (built from `docs/`), and the swatch tile files are in `swatches/`.
